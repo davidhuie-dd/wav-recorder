@@ -4,93 +4,141 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
+
+	"flag"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/gordonklaus/portaudio"
 )
 
-func main() {
+const (
+	framesPerBuffer = 256
+	bitDepth        = 32
+	channels        = 1
+)
+
+func printDevices() error {
 	if err := portaudio.Initialize(); err != nil {
-		panic(err)
+		return fmt.Errorf("error initializing portaudio: %w", err)
 	}
 
 	devs, err := portaudio.Devices()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("error listing audio devices: %w", err)
 	}
 	for i, d := range devs {
-		fmt.Printf("device %d: %s\n", i, d.Name)
-		// fmt.Printf("device %d: %#v\n", i, d)
+		fmt.Printf("Device #%d: %s\n", i, d.Name)
 	}
 
-	framesPerBuffer := 256
+	return nil
+}
 
-	dev := devs[2]
+func writeAudioToFile(devNum int, dest string, length time.Duration) error {
+	if err := portaudio.Initialize(); err != nil {
+		return fmt.Errorf("error initializing portaudio: %w", err)
+	}
+
+	devs, err := portaudio.Devices()
+	if err != nil {
+		return fmt.Errorf("error listing portaudio devices: %w", err)
+	}
+
+	dev := devs[devNum]
 	buf := make([]int32, framesPerBuffer)
+	sampleRate := dev.DefaultSampleRate
 
-	fmt.Printf("Using device: %#v\n", dev)
+	log.Printf("Using device %d: %s", devNum, dev.Name)
 
 	stream, err := portaudio.OpenStream(portaudio.StreamParameters{
 		Input: portaudio.StreamDeviceParameters{
 			Device:   dev,
-			Channels: 1,
+			Channels: channels,
 			Latency:  dev.DefaultLowInputLatency,
 		},
 		SampleRate:      dev.DefaultSampleRate,
 		FramesPerBuffer: framesPerBuffer,
 	}, buf)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("error creating portaudio stream: %w", err)
 	}
+	defer stream.Stop()
 
-	out, err := os.Create("test.wav")
+	out, err := os.Create(dest)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("error creating file: %w", err)
 	}
-	defer out.Close()
+	defer func() {
+		if err := out.Close(); err != nil {
+			log.Printf("error closing file: %s", err)
+		}
+	}()
 
 	enc := wav.NewEncoder(out,
-		int(dev.DefaultSampleRate),
-		32,
-		1,
+		int(sampleRate),
+		bitDepth,
+		channels,
 		1,
 	)
 	defer func() {
-		log.Println(enc.Close())
+		if err := enc.Close(); err != nil {
+			log.Printf("error encoder file: %s", err)
+		}
 	}()
 
 	if err := stream.Start(); err != nil {
-		panic(err)
+		return fmt.Errorf("error starting portaudio stream: %w", err)
 	}
+
+	log.Printf("Recording for the following %s...", length.String())
 
 	format := audio.Format{
-		NumChannels: 1,
-		SampleRate:  int(dev.DefaultSampleRate),
+		NumChannels: channels,
+		SampleRate:  int(sampleRate),
 	}
 
-	totalSecs := 3
-	samples := totalSecs * int(dev.DefaultSampleRate) / 256
-
-	fmt.Println(samples)
+	data := make([]int, len(buf))
+	samples := (int(length.Seconds()) * int(sampleRate)) / framesPerBuffer
 
 	for i := 0; i < samples; i++ {
 		if err := stream.Read(); err != nil {
-			panic(err)
+			return fmt.Errorf("error reading audio stream: %w", err)
 		}
 
-		d := make([]int, len(buf))
 		for i, v := range buf {
-			d[i] = int(v)
+			data[i] = int(v)
 		}
 
 		b := &audio.IntBuffer{
 			Format:         &format,
-			SourceBitDepth: 32,
-			Data:           d,
+			SourceBitDepth: bitDepth,
+			Data:           data,
 		}
 		if err := enc.Write(b); err != nil {
-			panic(err)
+			return fmt.Errorf("error writing stream: %w", err)
+		}
+	}
+
+	log.Println("...done!")
+
+	return nil
+}
+
+func main() {
+	dev := flag.Int("dev", 0, "the device to read from")
+	listDev := flag.Bool("list", false, "list the devices")
+	dest := flag.String("dest", "out.wav", "where to place the wav file that's read")
+	recLength := flag.Duration("len", 10*time.Second, "the amount of time to record")
+	flag.Parse()
+
+	if *listDev {
+		if err := printDevices(); err != nil {
+			panic(fmt.Errorf("error printing devices: %w", err))
+		}
+	} else {
+		if err := writeAudioToFile(*dev, *dest, *recLength); err != nil {
+			panic(fmt.Errorf("error writing audio to file: %w", err))
 		}
 	}
 }
