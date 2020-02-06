@@ -127,8 +127,8 @@ func writeAudioToFile(devNum int, dest string, length time.Duration) error {
 
 func main() {
 	dev := flag.Int("dev", 0, "the device to read from")
-	listDev := flag.Bool("list", false, "list the devices")
-	dest := flag.String("dest", "out.wav", "where to place the wav file that's read")
+	listDev := flag.Bool("list", false, "list the available audio devices")
+	dest := flag.String("dest", "out.wav", "where to place the output wav file")
 	recLength := flag.Duration("len", 10*time.Second, "the amount of time to record")
 	flag.Parse()
 
