@@ -1,7 +1,6 @@
 package ds
 
 import (
-	"errors"
 	"log"
 	"sync"
 
@@ -31,20 +30,20 @@ type CreateStreamArgs struct{}
 
 type CreateStreamResp struct{}
 
-func (d *DeepSpeechServer) CreateStream(_ CreateStreamArgs, _ *CreateStreamResp) error {
-	d.mu.Lock()
-	defer d.mu.Lock()
+// func (d *DeepSpeechServer) CreateStream(_ CreateStreamArgs, _ *CreateStreamResp) error {
+// 	d.mu.Lock()
+// 	defer d.mu.Unlock()
 
-	if d.stream != nil {
-		return errors.New("error: stream already exists")
-	}
+// 	if d.stream != nil {
+// 		return errors.New("error: stream already exists")
+// 	}
 
-	log.Printf("Starting new stream")
+// 	log.Printf("Starting new stream")
 
-	d.stream = astideepspeech.CreateStream(d.model)
+// 	d.stream = astideepspeech.CreateStream(d.model)
 
-	return nil
-}
+// 	return nil
+// }
 
 type IntermediateDecodeArgs struct{}
 
@@ -54,10 +53,10 @@ type IntermediateDecodeResp struct {
 
 func (d *DeepSpeechServer) IntermediateDecode(_ IntermediateDecodeArgs, resp *IntermediateDecodeResp) error {
 	d.mu.Lock()
-	defer d.mu.Lock()
+	defer d.mu.Unlock()
 
 	if d.stream == nil {
-		return errors.New("error: stream does not exist")
+		d.stream = astideepspeech.CreateStream(d.model)
 	}
 
 	log.Printf("Processing intermediate decoding")
@@ -77,7 +76,7 @@ type FinishStreamResp struct {
 
 func (d *DeepSpeechServer) FinishStream(_ FinishStreamArgs, resp *FinishStreamResp) error {
 	d.mu.Lock()
-	defer d.mu.Lock()
+	defer d.mu.Unlock()
 
 	if d.stream == nil {
 		*resp = FinishStreamResp{}
@@ -105,10 +104,10 @@ type FeedAudioContentResp struct {
 
 func (d *DeepSpeechServer) FeedAudioContent(args FeedAudioContentArgs, _ *FeedAudioContentResp) error {
 	d.mu.Lock()
-	defer d.mu.Lock()
+	defer d.mu.Unlock()
 
 	if d.stream == nil {
-		return errors.New("error: stream does not exist")
+		d.stream = astideepspeech.CreateStream(d.model)
 	}
 
 	log.Printf("Feeding audio content")
