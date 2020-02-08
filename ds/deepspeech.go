@@ -116,3 +116,26 @@ func (d *DeepSpeechServer) FeedAudioContent(args FeedAudioContentArgs, _ *FeedAu
 
 	return nil
 }
+
+type SpeechToTextArgs struct {
+	Buffer     []int16
+	BufferSize uint
+}
+
+type SpeechToTextResp struct {
+	Decoding string
+}
+
+func (d *DeepSpeechServer) SpeechToText(args SpeechToTextArgs, resp *SpeechToTextResp) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	log.Printf("Converting speech to text")
+
+	text := d.model.SpeechToText(args.Buffer, args.BufferSize)
+	*resp = SpeechToTextResp{
+		Decoding: text,
+	}
+
+	return nil
+}
